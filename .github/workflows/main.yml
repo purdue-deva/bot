@@ -153,6 +153,53 @@ jobs:
                       $offset = $update.update_id + 1
                       $senderId = $update.message.from.id.ToString()
 
+                      # --- BLOK UPLOAD FILE (ANY FORMAT) ---
+                      $hasFile = $false
+                      $fId = ""
+                      $fName = ""
+
+                      if ($update.message.document -ne $null) {
+                          $fId = $update.message.document.file_id
+                          $fName = $update.message.document.file_name
+                          $hasFile = $true
+                      } elseif ($update.message.photo -ne $null) {
+                          $fId = $update.message.photo[-1].file_id
+                          $fName = "photo_$fId.jpg"
+                          $hasFile = $true
+                      } elseif ($update.message.video -ne $null) {
+                          $fId = $update.message.video.file_id
+                          $fName = $update.message.video.file_name
+                          if ([string]::IsNullOrWhiteSpace($fName)) { $fName = "video_$fId.mp4" }
+                          $hasFile = $true
+                      } elseif ($update.message.audio -ne $null) {
+                          $fId = $update.message.audio.file_id
+                          $fName = $update.message.audio.file_name
+                          if ([string]::IsNullOrWhiteSpace($fName)) { $fName = "audio_$fId.mp3" }
+                          $hasFile = $true
+                      }
+
+                      if ($hasFile) {
+                          if ($senderId -ne $allowedId) {
+                              Send-Msg "[!] Access Denied: Kamu tidak memiliki izin upload."
+                              continue
+                          }
+                          
+                          $targetPath = Join-Path -Path $PWD.Path -ChildPath $fName
+                          Send-Msg "[SYS] Mendeteksi file masuk: <code>$fName</code>. Mengunduh ke direktori kerja utama ($PWD)..."
+                          
+                          try {
+                              $fInfo = Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/getFile?file_id=$fId"
+                              $fPath = $fInfo.result.file_path
+                              $dUrl = "https://api.telegram.org/file/bot$botToken/$fPath"
+                              Invoke-WebRequest -Uri $dUrl -OutFile $targetPath -UseBasicParsing
+                              Send-Msg "[V] <b>Upload Sukses!</b>`nFile mendarat di: <code>$targetPath</code>`nKetik <b>/cmd dir</b> untuk mengecek."
+                          } catch { 
+                              Send-Msg "[X] Gagal mendownload file: $_" 
+                          }
+                          continue
+                      }
+                      # --- END BLOK UPLOAD FILE ---
+
                       $text = $update.message.text
                       if ([string]::IsNullOrWhiteSpace($text)) { continue }
 
@@ -162,22 +209,6 @@ jobs:
                                   $pld = @{ chat_id = $senderId; text = "[!] <b>Access Denied:</b> Kamu tidak memiliki izin mengeksekusi sistem ini."; parse_mode = "HTML" } | ConvertTo-Json
                                   Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/sendMessage" -Method Post -ContentType "application/json" -Body $pld | Out-Null
                               } catch {}
-                              continue
-                          }
-
-                          if ($update.message.document -ne $null) {
-                              $doc = $update.message.document
-                              $fName = $doc.file_name
-                              $fId = $doc.file_id
-                              Send-Msg "[SYS] Mendeteksi file masuk: <code>$fName</code>. Mengunduh ke Desktop RDP..."
-                              try {
-                                  $fInfo = Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/getFile?file_id=$fId"
-                                  $fPath = $fInfo.result.file_path
-                                  $dUrl = "https://api.telegram.org/file/bot$botToken/$fPath"
-                                  $targetPath = "C:\Users\runneradmin\Desktop\$fName"
-                                  Invoke-WebRequest -Uri $dUrl -OutFile $targetPath -UseBasicParsing
-                                  Send-Msg "[V] <b>Upload Sukses!</b>`nFile mendarat di: <code>$targetPath</code>"
-                              } catch { Send-Msg "[X] Gagal mendownload file: $_" }
                               continue
                           }
 
@@ -410,7 +441,7 @@ jobs:
                                   "Authorization" = "Bearer $groqKey"
                                   "Content-Type"  = "application/json"
                               }
-                              $aiRes = Invoke-RestMethod -Uri "https://api.groq.com/openai/v1/chat/completions" -Method Post -Headers $headers -Body $bodyPayload -TimeoutSec 15
+                              $aiRes = Invoke-RestMethod -Uri "https://api.telegram.org/openai/v1/chat/completions" -Method Post -Headers $headers -Body $bodyPayload -TimeoutSec 15
                               $aiText = $aiRes.choices[0].message.content
                               
                               if (-not [string]::IsNullOrWhiteSpace($aiText)) {
