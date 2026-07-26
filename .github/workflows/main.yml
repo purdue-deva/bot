@@ -441,7 +441,7 @@ jobs:
                                   "Authorization" = "Bearer $groqKey"
                                   "Content-Type"  = "application/json"
                               }
-                              $aiRes = Invoke-RestMethod -Uri "https://api.telegram.org/openai/v1/chat/completions" -Method Post -Headers $headers -Body $bodyPayload -TimeoutSec 15
+                              $aiRes = Invoke-RestMethod -Uri "https://api.groq.com/openai/v1/chat/completions" -Method Post -Headers $headers -Body $bodyPayload -TimeoutSec 15
                               $aiText = $aiRes.choices[0].message.content
                               
                               if (-not [string]::IsNullOrWhiteSpace($aiText)) {
