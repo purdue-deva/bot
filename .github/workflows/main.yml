@@ -42,15 +42,14 @@ jobs:
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "IPEnableRouter" -Value 1
 
           Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile ts.msi
-          $installProcess = Start-Process msiexec.exe -ArgumentList "/i ts.msi /quiet /norestart" -Wait -PassThru -NoNewWindow
-          $installProcess.WaitForExit()
-          
+          $installExitCode = 0
+
           choco install speedtest cloudflared -y
 
           $paths = @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")
           $ts = ""
           foreach ($p in $paths) { if (Test-Path $p) { $ts = $p; break } }
-          
+
           echo "TS_PATH=$ts" >> $env:GITHUB_ENV
           & $ts up --authkey="${{ secrets.TAILSCALE_AUTH_KEY }}" --hostname="gh-runner-$env:GITHUB_RUN_ID" --advertise-exit-node --advertise-tags="tag:github" --accept-routes --unattended --reset
           Start-Sleep -Seconds 15
@@ -67,6 +66,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GROQ_KEY: ${{ secrets.GROQ_API_KEY }}
+          CF_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
         run: |
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -75,50 +75,20 @@ jobs:
           $ipInfo = $env:TAILSCALE_IP
           $passInfo = $env:RDP_PASS
           $groqKey = $env:GROQ_KEY
-          
           $blacklist = '(?i)^\s*(nano|vi|vim|htop|top|less|more|man|ssh|ftp|telnet|winver|notepad|calc|explorer|diskpart|wmic|nslookup)\b|^\s*(python|python3|node|php|mysql|sqlite3)\s*$'
 
           function Send-Msg ($msg) {
               try {
-                  $payload = @{ 
-                      chat_id = $allowedId; 
-                      text = $msg; 
-                      parse_mode = "HTML"; 
-                      reply_markup = @{ remove_keyboard = $true } 
-                  } | ConvertTo-Json -Depth 3
+                  $payload = @{ chat_id = $allowedId; text = $msg; parse_mode = "HTML"; reply_markup = @{ remove_keyboard = $true } } | ConvertTo-Json -Depth 3
                   Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/sendMessage" -Method Post -ContentType "application/json" -Body $payload | Out-Null
               } catch { Write-Host "Error SendMsg: $_" }
           }
 
-          function Execute-WithTimeout ($exe, $argsList) {
-              $pInfo = New-Object System.Diagnostics.ProcessStartInfo
-              $pInfo.FileName = $exe
-              $pInfo.Arguments = $argsList
-              $pInfo.RedirectStandardOutput = $true
-              $pInfo.RedirectStandardError = $true
-              $pInfo.UseShellExecute = $false
-              $pInfo.CreateNoWindow = $true
-
-              $proc = New-Object System.Diagnostics.Process
-              $proc.StartInfo = $pInfo
-              
-              $stdout = New-Object System.Text.StringBuilder
-              $stderr = New-Object System.Text.StringBuilder
-
-              try {
-                  $proc.Start() | Out-Null
-                  $stdoutScript = { while (-not $proc.StandardOutput.EndOfStream) { $stdout.AppendLine($proc.StandardOutput.ReadLine()) | Out-Null } }
-                  $stderrScript = { while (-not $proc.StandardError.EndOfStream) { $stderr.AppendLine($proc.StandardError.ReadLine()) | Out-Null } }
-                  
-                  $hasExited = $proc.WaitForExit(15000)
-                  if (-not $hasExited) {
-                      $proc.Kill()
-                      return "[TIMEOUT - 15s Limit Exceeded]`nProcess terpaksa dimatikan oleh Bot System.`n`nPartial Output:`n" + $proc.StandardOutput.ReadToEnd()
-                  }
-                  return $proc.StandardOutput.ReadToEnd() + $proc.StandardError.ReadToEnd()
-              } catch {
-                  return "Execution Error: $_"
-              }
+          function Execute-WithTimeout($exe, $argsList, $timeoutSec = 15) {
+              $process = Start-Process -FilePath $exe -ArgumentList $argsList -NoNewWindow -PassThru -Wait
+              $output = $process.StandardOutput.ReadToEnd()
+              $error = $process.StandardError.ReadToEnd()
+              return "$output$error".Trim()
           }
 
           $menuCommands = @(
@@ -138,8 +108,8 @@ jobs:
               @{command="expose"; description="Buka tunnel port (Ketik manual via chat)"}
           )
           try {
-              $menuPayload = @{ commands = $menuCommands } | ConvertTo-Json -Depth 3
-              Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/setMyCommands" -Method Post -ContentType "application/json" -Body $menuPayload | Out-Null
+              $menuParams = @{ Uri = "https://api.telegram.org/bot$botToken/setMyCommands"; Method = "Post"; ContentType = "application/json"; Body = @{ commands = $menuCommands } | ConvertTo-Json -Depth 3 }
+              Invoke-RestMethod @menuParams | Out-Null
           } catch { Write-Host "Error Set Menu: $_" }
 
           $initMsg = "[SYS] <b>AZURE WORKSTATION ACTIVE!</b>`n`n[KEY] <b>Kredensial RDP Shared:</b>`nIP: <code>$ipInfo</code>`nUser: <code>runneradmin</code>`nPass: <code>$passInfo</code>`nGuacamole: <code>Belum di-setup (Ketik /setup)</code>`n`nKlik tombol <b>Menu</b> di pojok kiri bawah untuk navigasi. Kamu juga bisa chat langsung dengan saya tanpa simbol / untuk berinteraksi!"
@@ -278,6 +248,10 @@ jobs:
                                           "docker network create guacnet || true"
                                           "docker run -d --restart always --name guacd --network guacnet guacamole/guacd"
                                           "docker run -d --restart always --name guacamole --network guacnet -e GUACD_HOSTNAME=guacd -p 9000:8080 -v /etc/guacamole/user-mapping.xml:/etc/guacamole/user-mapping.xml guacamole/guacamole"
+                                          "sleep 10"
+                                          "docker exec guacamole rm -rf /usr/local/tomcat/webapps/ROOT"
+                                          "docker exec guacamole cp /opt/guacamole/guacamole.war /usr/local/tomcat/webapps/ROOT.war"
+                                          "docker restart guacamole"
                                       )
                                       $guacScriptArray -join "`n" | Set-Content -Path "C:\guac-setup.sh" -Encoding ASCII
 
@@ -321,19 +295,19 @@ jobs:
                                           netsh interface portproxy add v4tov4 listenport=9000 listenaddress=0.0.0.0 connectport=9000 connectaddress=$wslIP
                                           netsh advfirewall firewall add rule name="WSL-Guacamole" dir=in action=allow protocol=TCP localport=9000
 
-                                          Start-Process cmd.exe -ArgumentList "/c cloudflared tunnel --url http://localhost:9000 > C:\cf-guac.log 2>&1" -WindowStyle Hidden
-                                          Start-Sleep -Seconds 12
-                                          $cfLog = Get-Content "C:\cf-guac.log" -Raw
-                                          if ($cfLog -match "(https://[a-zA-Z0-9-]+\.trycloudflare\.com)") {
-                                              $guacUrl = $matches[1] + "/guacamole/"
-                                              Set-Content -Path "C:\guac-url.txt" -Value $guacUrl -Encoding UTF8
-                                              $payload = @{ 
-                                                  chat_id = "$using:allowedId"; 
-                                                  text = "[V] <b>GUI Deployment Sukses!</b>`nApache Guacamole WebRDP aktif.`nURL: <code>$guacUrl</code>"; 
-                                                  parse_mode = "HTML"
-                                              } | ConvertTo-Json -Depth 3
-                                              Invoke-RestMethod -Uri "https://api.telegram.org/bot$using:botToken/sendMessage" -Method Post -ContentType "application/json" -Body $payload | Out-Null
-                                          }
+                                          $cfToken = $env:CF_TOKEN
+                                          Start-Process cmd.exe -ArgumentList "/c cloudflared tunnel run --token $cfToken" -WindowStyle Hidden
+                                          Start-Sleep -Seconds 5
+                                          
+                                          $guacUrl = "https://remote.paridx.my.id/"
+                                          Set-Content -Path "C:\guac-url.txt" -Value $guacUrl -Encoding UTF8
+                                          
+                                          $payload = @{ 
+                                              chat_id = "$using:allowedId"; 
+                                              text = "[V] <b>GUI Deployment Sukses!</b>`nApache Guacamole WebRDP aktif.`nURL: <code>$guacUrl</code>"; 
+                                              parse_mode = "HTML"
+                                          } | ConvertTo-Json -Depth 3
+                                          Invoke-RestMethod -Uri "https://api.telegram.org/bot$using:botToken/sendMessage" -Method Post -ContentType "application/json" -Body $payload | Out-Null
                                       } | Out-Null
                                   }
                               }
