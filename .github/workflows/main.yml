@@ -37,13 +37,18 @@ jobs:
           echo "RDP_USER=runneradmin" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      - name: Install Network Core (Tailscale, Speedtest, Cloudflared)
-        run: |
+          - name: Install Network Core (Tailscale, Speedtest, Cloudflared)
+          run: |
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "IPEnableRouter" -Value 1
 
+          # 1. Download installer
           Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile ts.msi
-          $installExitCode = 0
+          
+          # 2. INI BARIS YANG HILANG (Eksekusi Instalasi Tailscale)
+          $installProcess = Start-Process msiexec.exe -ArgumentList "/i ts.msi /quiet /norestart" -Wait -PassThru -NoNewWindow
+          $installProcess.WaitForExit()
 
+          # 3. Lanjut install tool lainnya
           choco install speedtest cloudflared -y
 
           $paths = @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")
