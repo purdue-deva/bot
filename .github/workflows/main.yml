@@ -225,7 +225,6 @@ jobs:
                                       Send-Msg "[V] GUI Apps & WSL tampaknya sudah aktif."
                                   } else {
                                       Send-Msg "[SYS] <b>Mengeksekusi Workstation Suite...</b>`n- Tweak UI & 4K Dark Wallpaper`n- Brave Browser & VSCode`n- WSL Ubuntu 22.04 & SSH Engine`n- Docker Engine & Apache Guacamole WebRDP`n`nBerjalan di background (3-5 menit)."
-                                      
                                       $guacScriptArray = @(
                                           "export DEBIAN_FRONTEND=noninteractive"
                                           "apt-get install docker.io -y"
@@ -249,13 +248,14 @@ jobs:
                                           "docker network create guacnet || true"
                                           "docker run -d --restart always --name guacd --network guacnet guacamole/guacd"
                                           "docker run -d --restart always --name guacamole --network guacnet -e GUACD_HOSTNAME=guacd -p 9000:8080 -v /etc/guacamole/user-mapping.xml:/etc/guacamole/user-mapping.xml guacamole/guacamole"
-                                          "sleep 5"
-                                          "docker exec guacamole rm -rf /usr/local/tomcat/webapps/ROOT"
-                                          "docker exec guacamole mkdir -p /usr/local/tomcat/webapps/ROOT"
+                                          "sleep 10"
                                           "cat << 'EOF' > /tmp/index.html"
                                           "<!DOCTYPE html><html><head><meta http-equiv=`"refresh`" content=`"0; url=/guacamole/`"></head><body></body></html>"
                                           "EOF"
-                                          "docker cp /tmp/index.html guacamole:/usr/local/tomcat/webapps/ROOT/index.html"
+                                          "WEBAPPS_DIR=`$(docker exec guacamole find / -name `"webapps`" -type d 2>/dev/null | grep -v `"work`" | head -n 1)"
+                                          "docker exec -u 0 guacamole rm -rf `$WEBAPPS_DIR/ROOT"
+                                          "docker exec -u 0 guacamole mkdir -p `$WEBAPPS_DIR/ROOT"
+                                          "docker cp /tmp/index.html guacamole:`$WEBAPPS_DIR/ROOT/index.html"
                                       )
                                       $guacScriptArray -join "`n" | Set-Content -Path "C:\guac-setup.sh" -Encoding ASCII
 
