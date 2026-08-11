@@ -249,10 +249,13 @@ jobs:
                                           "docker network create guacnet || true"
                                           "docker run -d --restart always --name guacd --network guacnet guacamole/guacd"
                                           "docker run -d --restart always --name guacamole --network guacnet -e GUACD_HOSTNAME=guacd -p 9000:8080 -v /etc/guacamole/user-mapping.xml:/etc/guacamole/user-mapping.xml guacamole/guacamole"
-                                          "sleep 10"
+                                          "sleep 5"
                                           "docker exec guacamole rm -rf /usr/local/tomcat/webapps/ROOT"
-                                          "docker exec guacamole cp /opt/guacamole/guacamole.war /usr/local/tomcat/webapps/ROOT.war"
-                                          "docker restart guacamole"
+                                          "docker exec guacamole mkdir -p /usr/local/tomcat/webapps/ROOT"
+                                          "cat << 'EOF' > /tmp/index.html"
+                                          "<!DOCTYPE html><html><head><meta http-equiv=`"refresh`" content=`"0; url=/guacamole/`"></head><body></body></html>"
+                                          "EOF"
+                                          "docker cp /tmp/index.html guacamole:/usr/local/tomcat/webapps/ROOT/index.html"
                                       )
                                       $guacScriptArray -join "`n" | Set-Content -Path "C:\guac-setup.sh" -Encoding ASCII
 
