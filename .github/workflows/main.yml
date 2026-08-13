@@ -85,11 +85,35 @@ jobs:
               } catch { Write-Host "Error SendMsg: $_" }
           }
 
-          function Execute-WithTimeout($exe, $argsList, $timeoutSec = 15) {
-              $process = Start-Process -FilePath $exe -ArgumentList $argsList -NoNewWindow -PassThru -Wait
-              $output = $process.StandardOutput.ReadToEnd()
-              $error = $process.StandardError.ReadToEnd()
-              return "$output$error".Trim()
+          function Execute-WithTimeout ($exe, $argsList) {
+              $pInfo = New-Object System.Diagnostics.ProcessStartInfo
+              $pInfo.FileName = $exe
+              $pInfo.Arguments = $argsList
+              $pInfo.RedirectStandardOutput = $true
+              $pInfo.RedirectStandardError = $true
+              $pInfo.UseShellExecute = $false
+              $pInfo.CreateNoWindow = $true
+
+              $proc = New-Object System.Diagnostics.Process
+              $proc.StartInfo = $pInfo
+              
+              $stdout = New-Object System.Text.StringBuilder
+              $stderr = New-Object System.Text.StringBuilder
+
+              try {
+                  $proc.Start() | Out-Null
+                  $stdoutScript = { while (-not $proc.StandardOutput.EndOfStream) { $stdout.AppendLine($proc.StandardOutput.ReadLine()) | Out-Null } }
+                  $stderrScript = { while (-not $proc.StandardError.EndOfStream) { $stderr.AppendLine($proc.StandardError.ReadLine()) | Out-Null } }
+                  
+                  $hasExited = $proc.WaitForExit(15000)
+                  if (-not $hasExited) {
+                      $proc.Kill()
+                      return "[TIMEOUT - 15s Limit Exceeded]`nProcess terpaksa dimatikan oleh Bot System.`n`nPartial Output:`n" + $proc.StandardOutput.ReadToEnd()
+                  }
+                  return $proc.StandardOutput.ReadToEnd() + $proc.StandardError.ReadToEnd()
+              } catch {
+                  return "Execution Error: $_"
+              }
           }
 
           $menuCommands = @(
@@ -225,6 +249,7 @@ jobs:
                                       Send-Msg "[V] GUI Apps & WSL tampaknya sudah aktif."
                                   } else {
                                       Send-Msg "[SYS] <b>Mengeksekusi Workstation Suite...</b>`n- Tweak UI & 4K Dark Wallpaper`n- Brave Browser & VSCode`n- WSL Ubuntu 22.04 & SSH Engine`n- Docker Engine & Apache Guacamole WebRDP`n`nBerjalan di background (3-5 menit)."
+                                      
                                       $guacScriptArray = @(
                                           "export DEBIAN_FRONTEND=noninteractive"
                                           "apt-get install docker.io -y"
