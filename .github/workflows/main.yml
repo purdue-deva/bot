@@ -124,7 +124,7 @@ jobs:
               @{command="screenshot"; description="Intip layar RDP secara Live"},
               @{command="setup"; description="Instalasi GUI Apps, WSL & Guacamole WebRDP"},
               @{command="scanhost"; description="Nmap audit Windows Host Machine dari WSL"},
-              @{command="bridgewsl"; description="Bridge port WSL ke public IP"},
+              @{command="bridgewsl"; description="Bridge port WSL ke Host (Butuh 2 Parameter)"},
               @{command="fetch"; description="Download file dari RDP ke HP"},
               @{command="kill"; description="Algojo pembunuh proses Windows/WSL"},
               @{command="cmd"; description="Remote CMD (Ketik manual via chat)"},
@@ -209,7 +209,7 @@ jobs:
 
                           switch -Regex ($text) {
                               "^/(start|help)" {
-                                  Send-Msg "[INFO] <b>COMMAND CENTER v5.0 (Azure Workstation)</b>`n`n- /status : Cek Procie, CPU, RAM & Sisa Waktu VM`n- /ip : Intip IP, Password & Link Guacamole WebRDP`n- /speedtest : Uji kecepatan internet Azure`n- /screenshot : Intip layar RDP secara Live`n- /setup : Instalasi GUI Apps, Tweak UI, WSL & Guacamole`n- /scanhost : Auto Nmap scan Windows host machine dari WSL`n- /bridgewsl [port] : Expose port WSL ke Tailscale IP`n- /fetch [path] : Sedot file dari RDP ke HP`n- /kill [nama] : Tebas paksa proses Windows/WSL`n- /cmd [cmd] : Remote Windows Console`n- /ps [cmd] : Remote PowerShell`n- /wsl [cmd] : Remote Ubuntu Terminal`n- /expose [port] : Buka tunnel port umum via Cloudflare`n`n💡 <b>AzureBot AI (GPT-OSS-120B):</b> Kirim chat teks biasa tanpa awalan / untuk mengobrol secara langsung dengan saya!"
+                                  Send-Msg "[INFO] <b>COMMAND CENTER v5.0 (Azure Workstation)</b>`n`n- /status : Cek Procie, CPU, RAM & Sisa Waktu VM`n- /ip : Intip IP, Password & Link Guacamole WebRDP`n- /speedtest : Uji kecepatan internet Azure`n- /screenshot : Intip layar RDP secara Live`n- /setup : Instalasi GUI Apps, Tweak UI, WSL & Guacamole`n- /scanhost : Auto Nmap scan Windows host machine dari WSL`n- /bridgewsl [wslPort] [hostPort] : Expose port WSL ke port Windows (Hindari port system)`n- /fetch [path] : Sedot file dari RDP ke HP`n- /kill [nama] : Tebas paksa proses Windows/WSL`n- /cmd [cmd] : Remote Windows Console`n- /ps [cmd] : Remote PowerShell`n- /wsl [cmd] : Remote Ubuntu Terminal`n- /expose [port] : Buka tunnel port umum via Cloudflare`n`n💡 <b>AzureBot AI (GPT-OSS-120B):</b> Kirim chat teks biasa tanpa awalan / untuk mengobrol secara langsung dengan saya!"
                               }
                               "^/ip" { 
                                   $guacLink = "Belum di-setup (Ketik /setup)"
@@ -340,16 +340,22 @@ jobs:
                                       } | Out-Null
                                   }
                               }
-                              "^/bridgewsl (\d+)" {
-                                  $port = $matches[1]
-                                  $wslCheck = wsl.exe -l -q 2>$null
-                                  if ([string]::IsNullOrWhiteSpace($wslCheck)) {
-                                      Send-Msg "[X] <b>WSL belum terinstal!</b>"
+                              "^/bridgewsl\s*(.*)" {
+                                  $args = $matches[1] -split '\s+'
+                                  if ($args.Count -lt 2 -or -not ($args[0] -match '^\d+$') -or -not ($args[1] -match '^\d+$')) {
+                                      Send-Msg "[!] <b>Format Salah!</b>`nPerintah sekarang membutuhkan 2 parameter.`nGunakan: <code>/bridgewsl [wslPort] [hostPort]</code>`nContoh: <code>/bridgewsl 80 8080</code> (agar tidak menabrak port 80 bawaan Windows)."
                                   } else {
-                                      $wslIP = ((wsl -d Ubuntu-22.04 -u root bash -c "hostname -I") -split '\s+')[0].Trim()
-                                      netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress=$wslIP
-                                      netsh advfirewall firewall add rule name="WSL-Bridge-$port" dir=in action=allow protocol=TCP localport=$port
-                                      Send-Msg "[NET] <b>WSL Port $port Bridged!</b>`nBuka browser HP-mu ke: <code>http://$ipInfo`:$port</code>"
+                                      $wslPort = $args[0]
+                                      $hostPort = $args[1]
+                                      $wslCheck = wsl.exe -l -q 2>$null
+                                      if ([string]::IsNullOrWhiteSpace($wslCheck)) {
+                                          Send-Msg "[X] <b>WSL belum terinstal!</b>"
+                                      } else {
+                                          $wslIP = ((wsl -d Ubuntu-22.04 -u root bash -c "hostname -I") -split '\s+')[0].Trim()
+                                          netsh interface portproxy add v4tov4 listenport=$hostPort listenaddress=0.0.0.0 connectport=$wslPort connectaddress=$wslIP
+                                          netsh advfirewall firewall add rule name="WSL-Bridge-$hostPort" dir=in action=allow protocol=TCP localport=$hostPort
+                                          Send-Msg "[NET] <b>Bridge Berhasil!</b>`nWSL Port <code>$wslPort</code> ➔ Host Port <code>$hostPort</code>`nAkses via: <code>http://$ipInfo`:$hostPort</code>"
+                                      }
                                   }
                               }
                               "^/fetch (.+)" {
