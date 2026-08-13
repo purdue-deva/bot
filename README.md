@@ -314,8 +314,9 @@ Configure the following repository secrets:
 | `TAILSCALE_AUTH_KEY` | Tailscale authentication key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Authorized Telegram user |
-| `RDP_PASS` | Static Password For Credentials |
+| `RDP_PASS` | Your Static Password |
 | `GROQ_API_KEY` | Groq API key |
+| `CF_TUNNEL_TOKEN` | Cloudflare Tokens for Domain |
 
 ---
 
