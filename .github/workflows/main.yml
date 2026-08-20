@@ -39,16 +39,18 @@ jobs:
 
       - name: Install Network Core (Tailscale, Speedtest, Cloudflared)
         run: |
+          $ProgressPreference = 'SilentlyContinue'
+          
           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "IPEnableRouter" -Value 1
 
-          Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile ts.msi
+          Invoke-WebRequest https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi -OutFile ts.msi -UseBasicParsing
           $installProcess = Start-Process msiexec.exe -ArgumentList "/i ts.msi /quiet /norestart" -Wait -PassThru -NoNewWindow
           $installProcess.WaitForExit()
           
-          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "C:\Windows\cloudflared.exe"
+          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "C:\Windows\cloudflared.exe" -UseBasicParsing
           
-          Invoke-WebRequest -Uri "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip" -OutFile "speedtest.zip"
-          Expand-Archive -Path "speedtest.zip" -DestinationPath "speedtest_extracted"
+          Invoke-WebRequest -Uri "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip" -OutFile "speedtest.zip" -UseBasicParsing
+          Expand-Archive -Path "speedtest.zip" -DestinationPath "speedtest_extracted" -Force
           Move-Item -Path "speedtest_extracted\speedtest.exe" -Destination "C:\Windows\speedtest.exe" -Force
           
           $paths = @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")
