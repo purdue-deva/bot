@@ -45,8 +45,12 @@ jobs:
           $installProcess = Start-Process msiexec.exe -ArgumentList "/i ts.msi /quiet /norestart" -Wait -PassThru -NoNewWindow
           $installProcess.WaitForExit()
           
-          choco install speedtest cloudflared -y
-
+          Invoke-WebRequest -Uri "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "C:\Windows\cloudflared.exe"
+          
+          Invoke-WebRequest -Uri "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip" -OutFile "speedtest.zip"
+          Expand-Archive -Path "speedtest.zip" -DestinationPath "speedtest_extracted"
+          Move-Item -Path "speedtest_extracted\speedtest.exe" -Destination "C:\Windows\speedtest.exe" -Force
+          
           $paths = @("$env:ProgramFiles\Tailscale\tailscale.exe", "${env:ProgramFiles(x86)}\Tailscale\tailscale.exe")
           $ts = ""
           foreach ($p in $paths) { if (Test-Path $p) { $ts = $p; break } }
